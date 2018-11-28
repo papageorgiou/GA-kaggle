@@ -1,0 +1,144 @@
+---
+title: "prepX"
+author: "Alexandros Papageorgiou"
+date: "26 November 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(scipen=999)
+options(digits=3)
+
+
+```
+
+## Libs
+
+
+```{r libs, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(data.table)
+library(jsonlite)
+library(readr)
+library(lubridate)
+library(gridExtra)
+library(countrycode)
+library(corrr)
+library(highcharter)
+library(ggExtra)
+library(Rmisc)
+library(scales)
+library(tidyverse)
+library(summarytools) 
+
+
+theme_set(theme_light())
+
+
+```
+
+
+remove 1 
+
+```{r}
+
+
+
+hit_type_flat_df <- read_rds("data-files/hit_type_df_users_possibly.rds") %>% 
+    mutate(act_type_max=map(action_type_nu, max)) 
+
+
+vars_distinct_vals <- 
+    hit_type_flat_df %>% 
+    map(~length(unique(.x))) %>% 
+    as.data.frame() %>% 
+    gather(key=vars, value=distinct_vals) %>% 
+    arrange(desc(distinct_vals))
+
+constant_vars <- vars_distinct_vals %>% filter(distinct_vals<=2) %>% pull(vars)
+
+
+to_remove <- c("visitId", "hits1", "totalTransactionRevenue","adwordsClickInfo.slot", 
+               "adwordsClickInfo.gclId", "value", "action_type_nu", "action_type", 
+               "referer", "referralPath", "adContent", "campaign", "transactions")
+
+constant_toremove <- union(constant_vars,to_remove)
+
+df_thinner_1 <- hit_type_flat_df  %>% select(-constant_toremove)  
+
+
+```
+
+remove 2
+
+```{r}
+to_remove2 <- c("timeOnSite", "region", "continent")
+
+df_thinner_2 <- df_thinner_1 %>% select(-to_remove2)
+
+df_thinner_2$act_type_max <- unlist(df_thinner_2$act_type_max)
+
+num_vars <- c("pageviews", "sessionQualityDim", "act_type_max")
+
+
+#library(corrr)
+# possibly_s2 %>% select(num_vars) %>% correlate()
+
+df_thinner_2[, num_vars] <- lapply(df_thinner_2[, num_vars], as.integer)
+# most common source medium used/ does it include a google internal ? 
+
+
+
+```
+
+
+
+remove 3 +  isGoogleinternal
+
+```{r}
+
+
+to_remove3 <- c("keyword",
+                "visitNumber",
+                "source",
+                "medium")
+
+df_thinner_3 <-  df_thinner_2 %>% mutate(referer_1=as.character(referer_1)) %>% 
+    mutate(isGoogleinternal = ifelse(grepl("googleplex",referer_1), T, ifelse(grepl("sites\\.google", source), T, F))) %>% 
+    select(-to_remove3, -referer_1)
+
+
+```
+
+
+
+remove 4 
+
+
+```{r}
+to_remove4 <- c("metro", "sessionQualityDim", "pageviews", "networkDomain", "visitStartTime")
+
+
+df_thinner_4 <- df_thinner_3%>% mutate(transactionRevenue=as.numeric(transactionRevenue)) %>% 
+    mutate(transactionRevenue=ifelse(is.na(transactionRevenue), 0, transactionRevenue)) %>% 
+    select(-to_remove4)
+```
+
+
+```{r}
+# vars_to_factor <- c("channelGrouping",
+# "country",
+# "city",
+# "subContinent",
+# "deviceCategory",
+# "operatingSystem",
+# "browser")
+# 
+# 
+# 
+# df_thinner_4 <- df_thinner_4 %>% mutate_at(vars(vars_to_factor), as.factor)
+
+
+```
+

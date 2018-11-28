@@ -1,0 +1,201 @@
+---
+title: "prepX-aug-oct"
+author: "Alexandros Papageorgiou"
+date: "26 November 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+find mode
+
+```{r}
+find_mode <- function(myinput){
+    names(sort(summary(as.factor(myinput)), decreasing=T)[1:1])
+}
+
+columns_to_mode <- c("channelGrouping", "country", "city", "subContinent", "deviceCategory", "operatingSystem", "browser")
+
+
+
+df_mode_oct <- df_thinner_4  %>% filter(date >= as_datetime("2018-07-01")) %>%  
+    group_by(fullVisitorId) %>% summarise_at(.vars =columns_to_mode,  find_mode) 
+
+
+df_mode_oct_action <-  df_thinner_4 %>% 
+    filter(date >= as_datetime("2018-07-01")) %>%    group_by(fullVisitorId) %>% 
+    summarise(act_type_max=mean(act_type_max)) %>% mutate(act_type_avg=ifelse(is.na(act_type_max), 0, act_type_max)) %>% 
+    select(-act_type_max) %>% 
+    left_join(df_mode_oct) 
+
+```
+
+
+number of purchases by number of visits
+
+```{r}
+# buys_by_nbrvisits <- new_data_final %>% 
+#     group_by(fullVisitorId) %>% 
+#     summarise(number_sessions=n(), number_Trans=sum(hasRev)) %>% 
+#     group_by(number_sessions) %>% mutate(numberids_with_)
+#     mutate(nbr_of_trans_per_id=)
+#     group_by(count) %>% summarise(count_total=n(), sumoftransactions=sum(sumTrans)) %>% 
+#     arrange(desc(count_total)) 
+# 
+# rate <- buys_by_nbrvisits %>% mutate(rate=sumoftransactions/count_total)
+
+
+```
+
+
+
+df_til_oct
+
+```{r}
+
+df_til_oct <- df_thinner_4 %>% filter(date >= as_datetime("2018-07-01")) %>% 
+  group_by(fullVisitorId) %>%
+  dplyr::summarise(
+    totRev_oct = sum(transactionRevenue),
+    transactions_oct = sum(transactionRevenue > 0),
+    avg_transaction_oct=mean(transactionRevenue),
+    sessions_oct = dplyr::n(),
+    Ginternal_oct = max(isGoogleinternal > 0),
+    dates_oct = list(date),
+    #conv_dates = list(map(date, function(x) if (.$transactionRevenue >0) x )),
+    max_session_oct = max(date),
+    max_conversion_oct = max(ifelse(transactionRevenue > 0, date, as.Date("2018-01-01"))), 
+    dates_trans_oct=list(ifelse(transactionRevenue > 0, date, as.Date("2018-01-01"))))%>% 
+     mutate(max_conversion_oct = as_datetime(max_conversion_oct)) %>%
+     mutate(dates_oct=map(dates_oct, as_datetime))
+
+
+
+
+
+
+```
+
+join trainV2_afterJune17 
+
+
+```{r}
+#source("train-datav2-nohits.R")
+
+#write_rds(trainv2_converters, "trainv2_converters.rds")
+#trainv2_converters <- read_rds("trainv2_converters.rds")
+
+# joint <- df_til_aug %>% left_join(trainv2_converters) %>% 
+#     mutate(totalTrans_before=ifelse(is.na(totalTrans_before), 0, totalTrans_before)) %>% 
+#     mutate(sumTrans_before=ifelse(is.na(sumTrans_before), 0, sumTrans_before)) 
+
+trainv2_converters_fromJul17 <- read_csv("data-files/trainv2_converters_fromJul17.csv")
+
+oct_12m_joint <- df_til_oct %>% left_join(trainv2_converters_fromJul17)
+
+
+
+```
+
+
+join MJ
+
+```{r}
+
+df_MJ <- df_thinner_4 %>% filter(date < as_datetime("2018-07-01")) %>% 
+    group_by(fullVisitorId) %>%
+    dplyr::summarise(
+        totRev_MJ = sum(transactionRevenue),
+        transactions_MJ = sum(transactionRevenue > 0),
+        avg_transaction_MJ=mean(transactionRevenue),
+        sessions_MJ = dplyr::n(),
+        #Ginternal_aug = max(isGoogleinternal > 0),
+        #dates_aug = list(date),
+        #conv_dates = list(map(date, function(x) if (.$transactionRevenue >0) x )),
+        max_session_ML = max(date),
+        max_conversion_MJ = max(ifelse(transactionRevenue > 0, date, as.Date("2018-01-01")))) %>% 
+    mutate(max_conversion_MJ = as_datetime(max_conversion_MJ)) 
+
+ids_unique <- df_thinner_4 %>% count(fullVisitorId) %>% select(fullVisitorId)
+
+df_MJ_ids <- ids_unique %>% left_join(df_MJ) %>% 
+    mutate_if(is.numeric, funs(replace(., is.na(.), 0))) %>% 
+    select(fullVisitorId, transactions_MJ)
+
+
+joinMJ <- oct_12m_joint %>% left_join(df_MJ_ids)
+
+```
+
+
+
+join mode
+
+```{r}
+
+x_and_y_mode_oct <- joinMJ %>% 
+    left_join(df_mode_oct_action)
+
+```
+
+columns configure
+
+
+```{r}
+
+
+
+x_and_y_arranged_oct <- x_and_y_mode_oct %>%  select(fullVisitorId,
+                                     act_type_avg:browser,
+                                     sessions=sessions_oct,
+                                     transactions=transactions_oct,
+                                     Ginternal=Ginternal_oct,
+                                     totalTrans_before,
+                                     totRev_oct,
+                                     avg_transaction_oct,
+                                     dates_oct,
+                                     max_session_oct, 
+                                     max_conversion_oct, 
+                                     sumTrans_before,
+                                     transactions_MJ) %>% 
+    #mutate(act_type_max=as.integer(act_type_max)) %>% 
+    mutate(Ginternal=ifelse(Ginternal==0, F, T)) %>%
+    mutate(city=ifelse(city=="NA's", NA, city)) %>% 
+    mutate(totalTrans_before=ifelse(is.na(totalTrans_before), 0 , totalTrans_before)) %>% 
+    mutate(totalTrans_before=totalTrans_before + transactions_MJ)
+    
+vars_to_factor <- c("channelGrouping",
+"country",
+"city",
+"subContinent",
+"deviceCategory",
+"operatingSystem",
+"browser")
+
+
+
+x_and_y_arranged_oct <-x_and_y_arranged_oct %>% 
+    mutate_at(vars(vars_to_factor), as.factor)    
+                             
+                                     
+                        
+```
+
+```{r}
+final_df_new <- x_and_y_arranged_oct %>% 
+    select(fullVisitorId, act_type_avg:totalTrans_before)  %>%  
+    select(-city)
+
+#write_csv(final_df_validation, "final_df_validatin.csv")
+
+write_rds(final_df_new, "data-files/final_df_new.rds")
+```
+
+
+
+
+

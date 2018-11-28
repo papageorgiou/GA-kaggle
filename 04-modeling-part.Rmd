@@ -1,0 +1,218 @@
+---
+title: "modeling part"
+author: "Alexandros Papageorgiou"
+date: "26 November 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(caret)
+library(randomForest)
+library(pROC)
+library(ROCR)
+```
+
+
+ 
+```{r}
+set.seed(1234)
+
+final_df <- read_rds("data-files/final_df.rds")
+
+training_indexs <- createDataPartition(final_df$transactions_test, p = .7, list = F)
+
+training <- final_df[training_indexs, ]
+testing  <- final_df[-training_indexs, ]
+```
+
+
+
+
+
+```{r}
+
+# locate new model !!
+rf_tune <- read_rds("output/models/rf_tune_kernel.rds")
+
+print(rf_tune)
+
+```
+
+
+
+The final model
+```{r}
+rf_tune$finalModel   
+
+```
+
+```{r}
+# plot(rf_tune,
+#      metric="ROC",
+#      scales=list(x=list(log=2)))
+#ggplot(rf_tune)  + theme(legend.position="top")
+```
+
+
+Random Forest Testset Predictions
+
+
+```{r}
+rf_tune$xlevels[["country"]] <- union(rf_tune$xlevels[["country"]], levels(testing$country))
+rf_tune$xlevels[["browser"]] <- union(rf_tune$xlevels[["browser"]], levels(testing$browser))
+rf_tune$xlevels[["subContinent"]] <- union(rf_tune$xlevels[["subContinent"]], levels(testing$subContinent))
+
+
+rf_pred <- predict(rf_tune,  testing)
+
+head(rf_pred)
+```
+
+
+
+
+# Conf.M / Probs/ AUC
+
+```{r}
+
+confusionMatrix(rf_pred,testing$transactions_test)
+
+```
+
+new data
+
+
+```{r}
+
+ # final_df_validation$country <- factor( final_df_validation$country, levels = levels(testing$country))
+ # final_df_validation$country <- factor( final_df_validation$country, levels = levels(testing$country))
+
+final_df_new <- read_rds("data-files/final_df_new.rds") 
+
+# final_df_validation$country <- factor( final_df_validation$country, levels = levels(training$country))
+# final_df_validation$browser <- factor( final_df_validation$browser, levels = levels(training$browser))
+
+
+rf_tune$xlevels[["country"]] <- union(rf_tune$xlevels[["country"]], levels(final_df_new$country))
+rf_tune$xlevels[["browser"]] <- union(rf_tune$xlevels[["browser"]], levels(final_df_new$browser))
+rf_tune$xlevels[["subContinent"]] <- union(rf_tune$xlevels[["subContinent"]], levels(final_df_new$subContinent))
+
+final_df_new[is.na(final_df_new)] <- 0
+
+pred <- predict(rf_tune,  final_df_new)
+
+head(pred)
+
+```
+
+expected revenue if convert
+
+```{r}
+# final data 
+
+
+
+dates_active <- df_til_oct  %>% unnest(dates_oct) %>%  
+    group_by(fullVisitorId) %>% 
+    summarise(dates_active=max(dates_oct)-min(dates_oct)) 
+
+median_rev <- hit_type_flat_df %>%  mutate_at(vars(transactionRevenue,transactions), as.numeric) %>% 
+    mutate(transactionRevenue=ifelse(is.na(transactionRevenue), 0, transactionRevenue)) %>%
+    mutate(transactions=ifelse(is.na(transactions), 0, transactions)) %>% 
+    mutate(mean_rev=transactionRevenue/transactions, na.rm=T) %>% pull(mean_rev) %>% median(na.rm = T)
+
+
+df_rev_exp <- df_til_oct %>% left_join(dates_active) %>% 
+    mutate(expected_rev= ifelse(as.numeric(dates_active) <30, totRev_oct,(totRev_oct/as.numeric(dates_active))*60)) %>% 
+    select(fullVisitorId, totRev_oct, expected_rev) %>% 
+    mutate(expected_rev=ifelse(expected_rev==0, median_rev, expected_rev)) %>% 
+    mutate(exp_rev_log1p = log1p(expected_rev))
+
+df_rev_exp$res <- pred
+
+#df_rev_exp <- df_rev_exp %>% final
+
+
+
+```
+
+
+submission
+
+
+```{r}
+col_types <- cols(
+    fullVisitorId = col_character(),
+    PredictedLogRevenue = col_double() 
+)
+
+submission <- read_csv("output/submissions/sample_submission_v2.csv", col_types = col_types)
+
+final_submission1 <- submission %>% 
+    left_join(df_rev_exp) %>% 
+    mutate(PredictedLogRevenue=ifelse(!is.na(exp_rev_log1p), exp_rev_log1p, 0)) %>% 
+    select(fullVisitorId, PredictedLogRevenue)
+
+## NAME IT
+
+write_csv(final_submission1, "output/submissions/submission_nov29.csv")
+```
+
+
+
+```{r}
+
+
+
+# final_w_res <- final_df_validation %>% mutate(res=pred)
+# 
+# test_w_res <- testing %>% mutate(res=rf_pred)
+
+
+```
+
+
+Probs
+```{r}
+# rf.probs <-  predict(rf_tune,testX,type="prob")
+# 
+# head(rf.probs)
+```
+
+
+AUC score
+```{r}
+
+# rf.ROC <-  roc(predictor=rf.probs$Happy,
+#               response=testData$Happy,
+#               levels=rev(levels(testData$Happy)))
+# 
+# rf.ROC
+```
+ROC Curve
+```{r}
+# plot(rf.ROC,main = "Random Forest ROC")
+
+```
+
+
+```{r}
+# fm <- rf_default2$finalModel
+# 
+# # 
+# # 
+# importance(fm)
+# 
+# varImp(rf_default2)
+
+#names(sort(importance(rf_default2)[,1], decreasing=T))[1:25]
+
+
+```
+
+
