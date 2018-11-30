@@ -22,22 +22,21 @@ library(ROCR)
 ```{r}
 set.seed(1234)
 
-final_df <- read_rds("data-files/final_df.rds")
+final_df <- read_rds("data-files/final_df_converters.rds")
 
 training_indexs <- createDataPartition(final_df$transactions_test, p = .7, list = F)
 
-training <- final_df[training_indexs, ]
-testing  <- final_df[-training_indexs, ]
+training <- final_df[training_indexs, ] 
+testing  <- final_df[-training_indexs, ] 
+
 ```
-
-
 
 
 
 ```{r}
 
 # locate new model !!
-rf_tune <- read_rds("output/models/rf_tune_kernel.rds")
+rf_tune <- read_rds("output/models/rf_tune_nov29sessn.rds")
 
 print(rf_tune)
 
@@ -118,8 +117,8 @@ expected revenue if convert
 
 
 dates_active <- df_til_oct  %>% unnest(dates_oct) %>%  
-    group_by(fullVisitorId) %>% 
-    summarise(dates_active=max(dates_oct)-min(dates_oct)) 
+    dplyr::group_by(fullVisitorId) %>% 
+    dplyr::summarise(dates_active=max(dates_oct)-min(dates_oct)) 
 
 median_rev <- hit_type_flat_df %>%  mutate_at(vars(transactionRevenue,transactions), as.numeric) %>% 
     mutate(transactionRevenue=ifelse(is.na(transactionRevenue), 0, transactionRevenue)) %>%
@@ -160,9 +159,12 @@ final_submission1 <- submission %>%
 
 ## NAME IT
 
-write_csv(final_submission1, "output/submissions/submission_nov29.csv")
+write_csv(final_submission1, "output/submissions/submission_nov29nsess.csv")
 ```
 
+```{r}
+importance(rf_tune$finalModel)
+```
 
 
 ```{r}
@@ -215,4 +217,12 @@ ROC Curve
 
 ```
 
+```{r}
+
+importance(rf_tune3$finalModel)
+rf_tune2 <- read_rds("output/models/rf_tune_kernel.rds")
+rf_tune3 <- read_rds("output/models/rf_tune.rds")
+
+rf_tune
+```
 

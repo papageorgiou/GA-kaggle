@@ -1,6 +1,7 @@
 library(caret)
 library(randomForest)
 library(doParallel)
+library(tidyverse)
 library(corrplot)
 library(pROC)
 library(ROCR)
@@ -11,7 +12,7 @@ getDoParWorkers()
 
 set.seed(1234)
 
-final_df <- read_rds("../input/final_df.rds")
+final_df <- read_rds("../input/final_df_converters.rds")
 
 training_indexs <- createDataPartition(final_df$transactions_test, p = .7, list = F)
 
@@ -45,7 +46,7 @@ cat("\n# Time taken: ", format(Sys.time() - starting))
 
 ## name the new model!
 
-saveRDS(rf_tune, "rf_tune_nov29.rds")
+saveRDS(rf_tune, "rf_tune_converters.rds")
 
 
 print(rf_tune)
